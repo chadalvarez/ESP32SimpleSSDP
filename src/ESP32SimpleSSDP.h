@@ -10,11 +10,14 @@ public:
     ESP32SimpleSSDP();
     void begin();
     void loop();
-    
+
     void setRootHandler(ArRequestHandlerFunction handler);
+    void addWebHandler(const char* path, ArRequestHandlerFunction handler);
     void setDeviceInfo(const char* key, const char* value);
     String getDeviceInfo(const char* key);
-    void printDeviceInfo(); // 🔹 Print SSDP details
+    void printDeviceInfo();
+
+    AsyncWebServer& getServer(); 
 
 private:
     AsyncWebServer server;
@@ -28,6 +31,8 @@ private:
     void startUDP();
     void sendSSDPNotify();
     void setupWebServer();
+
+    ArRequestHandlerFunction customRootHandler = nullptr; // 🔹 Stores user-defined root handler
 };
 
 #endif

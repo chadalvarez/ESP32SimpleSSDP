@@ -1,6 +1,6 @@
 #include "ESP32SimpleSSDP.h"
 
-// 🔹 Device Info Storage (Dynamic)
+// Device Info Storage (Dynamic)
 struct DeviceInfo {
     const char* key;
     String value;
@@ -32,6 +32,8 @@ void ESP32SimpleSSDP::begin() {
     startUDP();
     setupWebServer();
 
+    printDeviceInfo();
+
     for (int i = 0; i < 3; i++) {
         sendSSDPNotify();
         delay(1000);
@@ -45,7 +47,7 @@ void ESP32SimpleSSDP::loop() {
     }
 }
 
-// 🔹 Print SSDP Device Details to Serial
+// Print SSDP Device Details to Serial
 void ESP32SimpleSSDP::printDeviceInfo() {
     Serial.println("\n--- SSDP Device Info ---");
     for (const auto& item : deviceInfo) {
@@ -56,7 +58,7 @@ void ESP32SimpleSSDP::printDeviceInfo() {
     Serial.println("-------------------------");
 }
 
-// 🔹 Modify Device Info at Runtime
+// Modify Device Info at Runtime
 void ESP32SimpleSSDP::setDeviceInfo(const char* key, const char* value) {
     for (auto& item : deviceInfo) {
         if (strcmp(item.key, key) == 0) {
@@ -66,7 +68,7 @@ void ESP32SimpleSSDP::setDeviceInfo(const char* key, const char* value) {
     }
 }
 
-// 🔹 Retrieve Device Info
+// Retrieve Device Info
 String ESP32SimpleSSDP::getDeviceInfo(const char* key) {
     for (const auto& item : deviceInfo) {
         if (strcmp(item.key, key) == 0) {
@@ -76,21 +78,26 @@ String ESP32SimpleSSDP::getDeviceInfo(const char* key) {
     return "";
 }
 
-// 🔹 Generate UUID based on ESP32 MAC Address
+// Generate UUID based on ESP32 MAC Address
 void ESP32SimpleSSDP::generateUUID() {
     uint8_t mac[6];
     WiFi.macAddress(mac);
     char uuidStr[64];
+
     snprintf(uuidStr, sizeof(uuidStr),
              "uuid:%02X%02X%02X-%02X%02X-%02X%02X-%02X%02X-%02X%02X%02X%02X",
              mac[0], mac[1], mac[2],
              mac[3], mac[4], mac[5],
              mac[0], mac[1], mac[2],
              mac[3], mac[4], mac[5]);
+
     deviceUUID = String(uuidStr);
+
+    Serial.println("Generated UUID: " + deviceUUID);  // Debugging log
 }
 
-// 🔹 Start UDP listener for SSDP M-SEARCH
+
+// Start UDP listener for SSDP M-SEARCH
 void ESP32SimpleSSDP::startUDP() {
     if (WiFi.status() != WL_CONNECTED) {
         Serial.println("ERROR: WiFi not connected. Cannot start SSDP UDP.");
@@ -123,7 +130,7 @@ void ESP32SimpleSSDP::startUDP() {
     }
 }
 
-// 🔹 Send SSDP NOTIFY packets
+// Send SSDP NOTIFY packets
 void ESP32SimpleSSDP::sendSSDPNotify() {
     String notifyMessage =
         "NOTIFY * HTTP/1.1\r\n"
@@ -140,7 +147,7 @@ void ESP32SimpleSSDP::sendSSDPNotify() {
     Serial.println("Sent SSDP NOTIFY");
 }
 
-// 🔹 Set up the SSDP Web Server
+// Set up the SSDP Web Server
 void ESP32SimpleSSDP::setupWebServer() {
     server.on("/description.xml", HTTP_GET, [this](AsyncWebServerRequest *request) {
         String xml =
@@ -167,23 +174,28 @@ void ESP32SimpleSSDP::setupWebServer() {
         request->send(200, "text/xml", xml);
     });
 
-    // Default root page
-    server.on("/", HTTP_GET, [](AsyncWebServerRequest *request) {
-        request->send(200, "text/plain", "Hello from ESP32 SSDP!");
-    });
+    // Use stored custom root handler if set
+    if (customRootHandler) {
+        server.on("/", HTTP_ANY, customRootHandler);
+    } else {
+        server.on("/", HTTP_ANY, [](AsyncWebServerRequest *request) {
+            request->send(200, "text/plain", "Hello from ESP32 SSDP!");
+        });
+    }
 
     server.begin();
 }
 
 void ESP32SimpleSSDP::setRootHandler(ArRequestHandlerFunction handler) {
-    // 🔹 Re-register `/description.xml` to ensure it remains accessible
-    server.on("/description.xml", HTTP_GET, [this](AsyncWebServerRequest *request) {
-        request->send(200, "text/xml", "SSDP Description");
-    });
-
-    // 🔹 Override the root handler (`"/"`) with the user-defined handler
-    server.on("/", HTTP_GET, handler);
-
-    // 🔹 Restart the server to apply changes
-    server.begin();
+    customRootHandler = handler; // Store user handler for later use
 }
+
+void ESP32SimpleSSDP::addWebHandler(const char* path, ArRequestHandlerFunction handler) {
+    server.on(path, HTTP_ANY, handler);
+    Serial.printf("Custom Web Handler added: %s\n", path);
+}
+
+AsyncWebServer& ESP32SimpleSSDP::getServer() {
+    return server;
+}
+
